@@ -8,10 +8,12 @@ import (
 	"path/filepath"
 
 	"github.com/google/go-cmp/cmp"
-	"gopkg.in/yaml.v3"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/json"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/restmapper"
@@ -19,37 +21,18 @@ import (
 	"k8s.io/client-go/util/homedir"
 )
 
-func normalize(obj any) any {
-	switch x := obj.(type) {
-	case map[string]any:
-		result := make(map[string]any)
-		for k, v := range x {
-			result[k] = normalize(v)
-		}
-		return result
-	case []any:
-		var result []any
-		for _, v := range x {
-			result = append(result, normalize(v))
-		}
-		return result
-	case int:
-		return int64(x)
+type Object struct {
+	v1.TypeMeta   `json:",inline"`
+	v1.ObjectMeta `json:"metadata"`
+	Spec          map[string]any `json:"spec"`
+}
+
+func (o *Object) String() string {
+	if o.Namespace == "" {
+		return fmt.Sprintf("%s %s %s", o.APIVersion, o.Kind, o.Name)
 	}
-	return obj
-}
+	return fmt.Sprintf("%s %s %s/%s", o.APIVersion, o.Kind, o.Namespace, o.Name)
 
-type Metadata struct {
-	Name      string `yaml:"name"`
-	Namespace string `yaml:"namespace"`
-}
-
-type Target struct {
-	ApiVersion string `yaml:"apiVersion"`
-	Kind       string `yaml:"kind"`
-	Metadata   `yaml:"metadata"`
-	Manifest   string `yaml:"manifest"`
-	Resource   schema.GroupVersionResource
 }
 
 func getResource(apiVersion, kind string, mapper meta.RESTMapper) (schema.GroupVersionResource, error) {
@@ -66,36 +49,25 @@ func getResource(apiVersion, kind string, mapper meta.RESTMapper) (schema.GroupV
 	return mapping.Resource, nil
 }
 
-func check(targets []Target, client dynamic.Interface) ([]string, error) {
-	var result []string
-	for _, target := range targets {
-		// get the current manifest
-		resp, err := client.
-			Resource(target.Resource).
-			List(context.Background(), v1.ListOptions{})
-		if err != nil {
-			return result, err
-		}
-
-		// get the default manifest
-		content, err := os.ReadFile(target.Manifest)
-		if err != nil {
-			return result, err
-		}
-
-		var manifest map[string]any
-		err = yaml.Unmarshal(content, &manifest)
-		if err != nil {
-			return result, err
-		}
-
-		normalized := normalize(manifest).(map[string]any)
-		for _, item := range resp.Items {
-			diff := cmp.Diff(normalized["spec"], item.Object["spec"])
-			result = append(result, diff)
-		}
+func check(obj *Object, client dynamic.Interface, resource schema.GroupVersionResource) (string, error) {
+	// get the current manifest
+	resp, err := client.
+		Resource(resource).
+		Get(context.Background(), obj.Name, v1.GetOptions{})
+	if errors.IsNotFound(err) {
+		return fmt.Sprintf("%s not found", obj), nil
 	}
-	return result, nil
+	if err != nil {
+		return "", err
+	}
+	rawJson, err := resp.MarshalJSON()
+	if err != nil {
+		return "", err
+	}
+	fmt.Println(string(rawJson))
+	var curr Object
+	json.Unmarshal(rawJson, &curr)
+	return cmp.Diff(obj.Spec, curr.Spec), nil
 }
 
 func main() {
@@ -106,19 +78,14 @@ func main() {
 	} else {
 		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
 	}
-	targetList := flag.String("target", "", "path to the yaml file of target properties")
+	dir := flag.String("dir", "", "path to the yaml file of target properties")
 	flag.Parse()
+
 	// read settings yaml
-	if *targetList == "" {
+	if *dir == "" {
 		panic("--target option is required")
 	}
-	targetListPath, err := filepath.Abs(*targetList)
-	var targets []Target
-	f, err := os.ReadFile(targetListPath)
-	if err != nil {
-		panic(err.Error())
-	}
-	err = yaml.Unmarshal(f, &targets)
+	files, err := os.ReadDir(*dir)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -138,27 +105,42 @@ func main() {
 	}
 	mapper := restmapper.NewDiscoveryRESTMapper(groupResources)
 
-	// normalize the manifest paths to the absolute paths
-	for i, target := range targets {
-		if !filepath.IsAbs(target.Manifest) {
-			targets[i].Manifest = filepath.Join(filepath.Dir(targetListPath), target.Manifest)
-		}
-		targets[i].Resource, err = getResource(target.ApiVersion, target.Kind, mapper)
-		if err != nil {
-			panic(err.Error())
-		}
-	}
-
 	// create the client
 	client, err := dynamic.NewForConfig(config)
 	if err != nil {
 		panic(err.Error())
 	}
 
-	diffs, err := check(targets, client)
-	if err != nil {
-		panic(err.Error())
+	var diffs []string
+	for _, f := range files {
+		var obj Object
+		content, err := os.ReadFile(filepath.Join(*dir, f.Name()))
+		if err != nil {
+			panic(err.Error())
+		}
+		// if we unmarshall directly from yaml, int64 is inferred as float64 somehow
+		// so we convert yaml to json first and then unmarshall it
+		jsonContent, err := yaml.ToJSON(content)
+		if err != nil {
+			panic(err.Error())
+		}
+		err = json.Unmarshal(jsonContent, &obj)
+		if err != nil {
+			panic(err.Error())
+		}
+		// get gvr
+		resource, err := getResource(obj.APIVersion, obj.Kind, mapper)
+		if err != nil {
+			panic(err.Error())
+		}
+		//check the diff
+		diff, err := check(&obj, client, resource)
+		if err != nil {
+			panic(err.Error())
+		}
+		diffs = append(diffs, diff)
 	}
+
 	for _, diff := range diffs {
 		fmt.Println(diff)
 	}

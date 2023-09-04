@@ -1,5 +1,7 @@
 apiVersion: machineconfiguration.openshift.io/v1
 kind: KubeletConfig
+metadata:
+  name: aro-limits
 spec:
   kubeletConfig:
     evictionHard:
