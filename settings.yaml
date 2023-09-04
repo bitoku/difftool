@@ -1,0 +1,10 @@
+- apiVersion: operator.openshift.io/v1
+  kind: DNS
+  metadata:
+    name: default
+  manifest: ./default/dns.yaml
+- apiVersion: machineconfiguration.openshift.io/v1
+  kind: KubeletConfig
+  metadata:
+    name: aro-limits
+  manifest: ./default/kubeletconfig.yaml
