@@ -1,0 +1,95 @@
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfigPool
+metadata:
+  creationTimestamp: "2023-08-29T10:15:47Z"
+  generation: 2
+  labels:
+    machineconfiguration.openshift.io/mco-built-in: ""
+    operator.machineconfiguration.openshift.io/required-for-upgrade: ""
+    pools.operator.machineconfiguration.openshift.io/master: ""
+  name: master
+  resourceVersion: "9219"
+  uid: 00124f9d-01aa-48b4-84a1-dcf66c9f1305
+spec:
+  configuration:
+    name: rendered-master-28a13b75963d8d1754151f7998438245
+    source:
+      - apiVersion: machineconfiguration.openshift.io/v1
+        kind: MachineConfig
+        name: 00-master
+      - apiVersion: machineconfiguration.openshift.io/v1
+        kind: MachineConfig
+        name: 01-master-container-runtime
+      - apiVersion: machineconfiguration.openshift.io/v1
+        kind: MachineConfig
+        name: 01-master-kubelet
+      - apiVersion: machineconfiguration.openshift.io/v1
+        kind: MachineConfig
+        name: 99-master-aro-dns
+      - apiVersion: machineconfiguration.openshift.io/v1
+        kind: MachineConfig
+        name: 99-master-generated-registries
+      - apiVersion: machineconfiguration.openshift.io/v1
+        kind: MachineConfig
+        name: 99-master-ssh
+  machineConfigSelector:
+    matchLabels:
+      machineconfiguration.openshift.io/role: master
+  nodeSelector:
+    matchLabels:
+      node-role.kubernetes.io/master: ""
+  paused: false
+status:
+  conditions:
+    - lastTransitionTime: "2023-08-29T10:16:26Z"
+      message: ""
+      reason: ""
+      status: "False"
+      type: RenderDegraded
+    - lastTransitionTime: "2023-08-29T10:16:55Z"
+      message: All nodes are updated with rendered-master-28a13b75963d8d1754151f7998438245
+      reason: ""
+      status: "True"
+      type: Updated
+    - lastTransitionTime: "2023-08-29T10:16:55Z"
+      message: ""
+      reason: ""
+      status: "False"
+      type: Updating
+    - lastTransitionTime: "2023-08-29T10:16:55Z"
+      message: ""
+      reason: ""
+      status: "False"
+      type: NodeDegraded
+    - lastTransitionTime: "2023-08-29T10:16:55Z"
+      message: ""
+      reason: ""
+      status: "False"
+      type: Degraded
+  configuration:
+    name: rendered-master-28a13b75963d8d1754151f7998438245
+    source:
+      - apiVersion: machineconfiguration.openshift.io/v1
+        kind: MachineConfig
+        name: 00-master
+      - apiVersion: machineconfiguration.openshift.io/v1
+        kind: MachineConfig
+        name: 01-master-container-runtime
+      - apiVersion: machineconfiguration.openshift.io/v1
+        kind: MachineConfig
+        name: 01-master-kubelet
+      - apiVersion: machineconfiguration.openshift.io/v1
+        kind: MachineConfig
+        name: 99-master-aro-dns
+      - apiVersion: machineconfiguration.openshift.io/v1
+        kind: MachineConfig
+        name: 99-master-generated-registries
+      - apiVersion: machineconfiguration.openshift.io/v1
+        kind: MachineConfig
+        name: 99-master-ssh
+  degradedMachineCount: 0
+  machineCount: 3
+  observedGeneration: 2
+  readyMachineCount: 3
+  unavailableMachineCount: 0
+  updatedMachineCount: 3

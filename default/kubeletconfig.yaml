@@ -1,16 +1,19 @@
-apiVersion: machineconfiguration.openshift.io/v1
-kind: KubeletConfig
-metadata:
-  name: aro-limits
-spec:
-  kubeletConfig:
-    evictionHard:
-      imagefs.available: 15%
-      memory.available: 500Mi
-      nodefs.available: 10%
-      nodefs.inodesFree: 5%
-    systemReserved:
-      memory: 2000Mi
-  machineConfigPoolSelector:
-    matchLabels:
-      aro.openshift.io/limits: ""
+apiVersion: v1
+kind: List
+items:
+- apiVersion: machineconfiguration.openshift.io/v1
+  kind: KubeletConfig
+  metadata:
+    name: aro-limits
+  spec:
+    kubeletConfig:
+      evictionHard:
+        imagefs.available: 15%
+        memory.available: 500Mi
+        nodefs.available: 10%
+        nodefs.inodesFree: 5%
+      systemReserved:
+        memory: 2000Mi
+    machineConfigPoolSelector:
+      matchLabels:
+        aro.openshift.io/limits: ""
