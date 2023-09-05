@@ -23,6 +23,11 @@ import (
 	"k8s.io/client-go/util/homedir"
 )
 
+type Target struct {
+	v1.TypeMeta `json:",inline"`
+	Manifest    string `json:"manifest"`
+}
+
 type Object struct {
 	v1.TypeMeta   `json:",inline"`
 	v1.ObjectMeta `json:"metadata"`
@@ -144,16 +149,35 @@ func main() {
 	} else {
 		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
 	}
-	dir := flag.String("dir", "", "path to the yaml file of target properties")
+	targetPath := flag.String("target", "", "path to the yaml file of target properties")
 	flag.Parse()
 
 	// read settings yaml
-	if *dir == "" {
+	if *targetPath == "" {
 		panic("--target option is required")
 	}
-	files, err := os.ReadDir(*dir)
+	targetAbsPath, err := filepath.Abs(*targetPath)
 	if err != nil {
 		panic(err.Error())
+	}
+	file, err := os.ReadFile(targetAbsPath)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	var targets []*Target
+	err = yaml.Unmarshal(file, &targets)
+	if err != nil {
+		panic(err.Error())
+	}
+	fmt.Println(len(targets))
+
+	// make manifest path absolute path
+	for _, target := range targets {
+		if filepath.IsAbs(target.Manifest) {
+			continue
+		}
+		target.Manifest = filepath.Join(filepath.Dir(targetAbsPath), target.Manifest)
 	}
 
 	// create a mapper to get a gvr
@@ -177,13 +201,18 @@ func main() {
 		panic(err.Error())
 	}
 
-	for _, f := range files {
+	for _, target := range targets {
 		var obj Object
-		content, err := os.ReadFile(filepath.Join(*dir, f.Name()))
-		fmt.Println(f.Name())
+		fmt.Println(filepath.Base(target.Manifest))
+		content, err := os.ReadFile(target.Manifest)
 		if err != nil {
 			panic(err.Error())
 		}
+		resource, err := getResource(target.APIVersion, target.Kind, mapper)
+		if err != nil {
+			panic(err.Error())
+		}
+
 		// if we unmarshall directly from yaml, int64 is inferred as float64 somehow
 		// so we convert yaml to json first and then unmarshall it
 		jsonContent, err := yaml.ToJSON(content)
@@ -197,21 +226,8 @@ func main() {
 		//check the diff
 		var diff string
 		if obj.APIVersion == "v1" && obj.Kind == "List" {
-			if !validateList(&obj) {
-				panic(fmt.Sprintf("%s contains different apiVersion or kind\n", f.Name()))
-			}
-			o := obj.Items[0]
-			resource, err := getResource(o.APIVersion, o.Kind, mapper)
-			if err != nil {
-				panic(err.Error())
-			}
 			diff, err = checkList(&obj, client, resource)
 		} else {
-			resource, err := getResource(obj.APIVersion, obj.Kind, mapper)
-			// get gvr
-			if err != nil {
-				panic(err.Error())
-			}
 			diff, err = checkObj(&obj, client, resource)
 		}
 		if err != nil {

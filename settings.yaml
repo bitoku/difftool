@@ -13,3 +13,6 @@
 - apiVersion: machineconfiguration.openshift.io/v1
   kind: ContainerRuntimeConfig
   manifest: ./default/containerruntimeconfig.yaml
+- apiVersion: machineconfiguration.openshift.io/v1
+  kind: MachineConfigPool
+  manifest: ./default/mastermachineconfigpool.yaml
