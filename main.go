@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/google/go-cmp/cmp"
@@ -21,11 +22,13 @@ import (
 	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
+	"k8s.io/utils/strings/slices"
 )
 
 type Target struct {
 	v1.TypeMeta `json:",inline"`
-	Manifest    string `json:"manifest"`
+	Manifest    string   `json:"manifest"`
+	Ignore      []string `json:"ignore"`
 }
 
 type Object struct {
@@ -40,6 +43,27 @@ func (o *Object) String() string {
 		return fmt.Sprintf("%s %s %s", o.APIVersion, o.Kind, o.Name)
 	}
 	return fmt.Sprintf("%s %s %s/%s", o.APIVersion, o.Kind, o.Namespace, o.Name)
+}
+
+func ignoreMapEntries(ignoredKeys []string) cmp.Option {
+	filter := func(path cmp.Path) bool {
+		var key []string
+		for _, ps := range path {
+			switch x := ps.(type) {
+			case cmp.MapIndex:
+				key = append(key, x.Key().String())
+			case cmp.SliceIndex:
+				key = append(key, strconv.Itoa(x.Key()))
+			}
+		}
+		// check it naively since ignoredKeys won't be so long,
+		return slices.Contains(ignoredKeys, strings.Join(key, "."))
+	}
+	return cmp.FilterPath(filter, cmp.Ignore())
+}
+
+func compare(a, b *Object, opts ...cmp.Option) string {
+	return cmp.Diff(a.Spec, b.Spec, opts...)
 }
 
 func UnmarshallUnstructured(u *unstructured.Unstructured, v any) error {
@@ -64,7 +88,7 @@ func getResource(apiVersion, kind string, mapper meta.RESTMapper) (schema.GroupV
 	return mapping.Resource, nil
 }
 
-func checkObj(obj *Object, client dynamic.Interface, resource schema.GroupVersionResource) (string, error) {
+func checkObj(obj *Object, client dynamic.Interface, resource schema.GroupVersionResource, opts ...cmp.Option) (string, error) {
 	// get the current manifest
 	resp, err := client.
 		Resource(resource).
@@ -76,16 +100,16 @@ func checkObj(obj *Object, client dynamic.Interface, resource schema.GroupVersio
 		return "", err
 	}
 
-	var curr Object
-	err = UnmarshallUnstructured(resp, &curr)
+	curr := new(Object)
+	err = UnmarshallUnstructured(resp, curr)
 	if err != nil {
 		return "", err
 	}
 
-	return cmp.Diff(obj.Spec, curr.Spec), nil
+	return compare(obj, curr, opts...), nil
 }
 
-func checkList(obj *Object, client dynamic.Interface, resource schema.GroupVersionResource) (string, error) {
+func checkList(obj *Object, client dynamic.Interface, resource schema.GroupVersionResource, opts ...cmp.Option) (string, error) {
 	resp, err := client.
 		Resource(resource).
 		List(context.Background(), v1.ListOptions{})
@@ -113,7 +137,7 @@ func checkList(obj *Object, client dynamic.Interface, resource schema.GroupVersi
 			continue
 		}
 		checked[curr.String()] = true
-		diff := cmp.Diff(i.Spec, curr.Spec)
+		diff := compare(i, curr, opts...)
 		if diff == "" {
 			continue
 		}
@@ -126,19 +150,6 @@ func checkList(obj *Object, client dynamic.Interface, resource schema.GroupVersi
 	}
 	diffs = append(presence, diffs...)
 	return strings.Join(diffs, "\n"), nil
-}
-
-func validateList(obj *Object) bool {
-	if len(obj.Items) == 0 {
-		return true
-	}
-	o := obj.Items[0]
-	for _, v := range obj.Items {
-		if v.APIVersion != o.APIVersion || v.Kind != o.Kind {
-			return false
-		}
-	}
-	return true
 }
 
 func main() {
@@ -170,7 +181,6 @@ func main() {
 	if err != nil {
 		panic(err.Error())
 	}
-	fmt.Println(len(targets))
 
 	// make manifest path absolute path
 	for _, target := range targets {
@@ -225,10 +235,11 @@ func main() {
 		}
 		//check the diff
 		var diff string
+		opts := []cmp.Option{ignoreMapEntries(target.Ignore)}
 		if obj.APIVersion == "v1" && obj.Kind == "List" {
-			diff, err = checkList(&obj, client, resource)
+			diff, err = checkList(&obj, client, resource, opts...)
 		} else {
-			diff, err = checkObj(&obj, client, resource)
+			diff, err = checkObj(&obj, client, resource, opts...)
 		}
 		if err != nil {
 			panic(err.Error())
