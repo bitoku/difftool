@@ -8,11 +8,15 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/json"
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/restmapper"
 	"k8s.io/utils/strings/slices"
 )
 
@@ -35,6 +39,25 @@ func (o *Object) String() string {
 	return fmt.Sprintf("%s %s %s/%s", o.APIVersion, o.Kind, o.Namespace, o.Name)
 }
 
+type Differ interface {
+	Diff(resource schema.GroupVersionResource, obj *Object, opts ...cmp.Option) ([]string, []string, error)
+}
+
+type Diff struct {
+	client dynamic.Interface
+}
+
+func New(client dynamic.Interface) *Diff {
+	return &Diff{client: client}
+}
+
+func (d *Diff) Diff(resource schema.GroupVersionResource, obj *Object, opts ...cmp.Option) ([]string, []string, error) {
+	if obj.IsList() {
+		return d.diffList(resource, obj, opts...)
+	}
+	return d.diffObj(resource, obj, opts...)
+}
+
 func IgnoreMapEntries(ignoredKeys []string) cmp.Option {
 	filter := func(path cmp.Path) bool {
 		var key []string
@@ -52,6 +75,19 @@ func IgnoreMapEntries(ignoredKeys []string) cmp.Option {
 	return cmp.FilterPath(filter, cmp.Ignore())
 }
 
+func GetRESTMapper(config *rest.Config) (meta.RESTMapper, error) {
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+	groupResources, err := restmapper.GetAPIGroupResources(discoveryClient)
+	if err != nil {
+		return nil, err
+	}
+	mapper := restmapper.NewDiscoveryRESTMapper(groupResources)
+	return mapper, nil
+}
+
 func compare(a, b *Object, opts ...cmp.Option) string {
 	return cmp.Diff(a.Spec, b.Spec, opts...)
 }
@@ -64,9 +100,9 @@ func unmarshallUnstructured(u *unstructured.Unstructured, v any) error {
 	return json.Unmarshal(rawJson, v)
 }
 
-func CheckObj(obj *Object, client dynamic.Interface, resource schema.GroupVersionResource, opts ...cmp.Option) (presences, diffs []string, err error) {
+func (d *Diff) diffObj(resource schema.GroupVersionResource, obj *Object, opts ...cmp.Option) (presences, diffs []string, err error) {
 	// get the current manifest
-	resp, err := client.
+	resp, err := d.client.
 		Resource(resource).
 		Get(context.Background(), obj.Name, v1.GetOptions{})
 	if errors.IsNotFound(err) {
@@ -88,8 +124,8 @@ func CheckObj(obj *Object, client dynamic.Interface, resource schema.GroupVersio
 	return []string{}, diffs, nil
 }
 
-func CheckList(obj *Object, client dynamic.Interface, resource schema.GroupVersionResource, opts ...cmp.Option) (presences, diffs []string, err error) {
-	resp, err := client.
+func (d *Diff) diffList(resource schema.GroupVersionResource, obj *Object, opts ...cmp.Option) (presences, diffs []string, err error) {
+	resp, err := d.client.
 		Resource(resource).
 		List(context.Background(), v1.ListOptions{})
 	if err != nil {

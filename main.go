@@ -13,10 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/apimachinery/pkg/util/yaml"
-	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
 
@@ -52,19 +49,6 @@ func unmarshall(data []byte, v any) error {
 	}
 	err = json.Unmarshal(jsonContent, v)
 	return err
-}
-
-func getMapper(config *rest.Config) (meta.RESTMapper, error) {
-	discoveryClient, err := discovery.NewDiscoveryClientForConfig(config)
-	if err != nil {
-		return nil, err
-	}
-	groupResources, err := restmapper.GetAPIGroupResources(discoveryClient)
-	if err != nil {
-		return nil, err
-	}
-	mapper := restmapper.NewDiscoveryRESTMapper(groupResources)
-	return mapper, nil
 }
 
 func loadYaml(path string, v any) error {
@@ -122,7 +106,7 @@ func run() error {
 		return err
 	}
 
-	mapper, err := getMapper(config)
+	mapper, err := objdiff.GetRESTMapper(config)
 	if err != nil {
 		return fmt.Errorf("failed to get RESTMapper: %s", err.Error())
 	}
@@ -133,6 +117,7 @@ func run() error {
 		return err
 	}
 
+	d := objdiff.New(client)
 	for _, target := range targets {
 		var obj objdiff.Object
 		fmt.Printf("# %s\n", filepath.Base(target.Manifest))
@@ -148,17 +133,13 @@ func run() error {
 		}
 
 		//check the diff
-		var diffs, presences []string
 		opts := []cmp.Option{objdiff.IgnoreMapEntries(target.Ignore)}
 
-		if obj.IsList() {
-			presences, diffs, err = objdiff.CheckList(&obj, client, resource, opts...)
-		} else {
-			presences, diffs, err = objdiff.CheckObj(&obj, client, resource, opts...)
-		}
+		presences, diffs, err := d.Diff(resource, &obj, opts...)
 		if err != nil {
 			return err
 		}
+
 		if len(presences) == 0 && len(diffs) == 0 {
 			fmt.Printf("No diff.\n\n")
 			continue
