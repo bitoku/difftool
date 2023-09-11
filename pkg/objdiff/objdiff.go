@@ -24,13 +24,6 @@ type Object struct {
 	Items         []*Object `json:"items,omitempty"`
 }
 
-type Differ interface {
-	Diff(obj *Object) string
-}
-
-type Diff struct {
-}
-
 func (o *Object) IsList() bool {
 	return o.Items != nil
 }
@@ -71,33 +64,36 @@ func unmarshallUnstructured(u *unstructured.Unstructured, v any) error {
 	return json.Unmarshal(rawJson, v)
 }
 
-func CheckObj(obj *Object, client dynamic.Interface, resource schema.GroupVersionResource, opts ...cmp.Option) (string, error) {
+func CheckObj(obj *Object, client dynamic.Interface, resource schema.GroupVersionResource, opts ...cmp.Option) (presences, diffs []string, err error) {
 	// get the current manifest
 	resp, err := client.
 		Resource(resource).
 		Get(context.Background(), obj.Name, v1.GetOptions{})
 	if errors.IsNotFound(err) {
-		return fmt.Sprintf("- %s is not found\n", obj), nil
+		return []string{fmt.Sprintf("- %s is not found\n", obj)}, []string{}, nil
 	}
 	if err != nil {
-		return "", err
+		return []string{}, []string{}, err
 	}
 
 	curr := new(Object)
 	err = unmarshallUnstructured(resp, curr)
 	if err != nil {
-		return "", err
+		return []string{}, []string{}, err
 	}
-
-	return compare(obj, curr, opts...), nil
+	diff := compare(obj, curr, opts...)
+	if diff != "" {
+		diffs = append(diffs, diff)
+	}
+	return []string{}, diffs, nil
 }
 
-func CheckList(obj *Object, client dynamic.Interface, resource schema.GroupVersionResource, opts ...cmp.Option) (string, error) {
+func CheckList(obj *Object, client dynamic.Interface, resource schema.GroupVersionResource, opts ...cmp.Option) (presences, diffs []string, err error) {
 	resp, err := client.
 		Resource(resource).
 		List(context.Background(), v1.ListOptions{})
 	if err != nil {
-		return "", err
+		return []string{}, []string{}, err
 	}
 
 	m := make(map[string]*Object)
@@ -106,17 +102,15 @@ func CheckList(obj *Object, client dynamic.Interface, resource schema.GroupVersi
 		curr := new(Object)
 		err = unmarshallUnstructured(&i, curr)
 		if err != nil {
-			return "", err
+			return []string{}, []string{}, err
 		}
 		m[curr.String()] = curr
 		checked[curr.String()] = false
 	}
-	var presence []string
-	var diffs []string
 	for _, i := range obj.Items {
 		curr, ok := m[i.String()]
 		if !ok {
-			presence = append(presence, fmt.Sprintf("- %s is not found\n", i))
+			presences = append(presences, fmt.Sprintf("- %s is not found\n", i))
 			continue
 		}
 		checked[curr.String()] = true
@@ -128,9 +122,8 @@ func CheckList(obj *Object, client dynamic.Interface, resource schema.GroupVersi
 	}
 	for k, v := range m {
 		if !checked[k] {
-			presence = append(presence, fmt.Sprintf("+ %s is found, but not in default\n", v))
+			presences = append(presences, fmt.Sprintf("+ %s is found, but not in default\n", v))
 		}
 	}
-	diffs = append(presence, diffs...)
-	return strings.Join(diffs, "\n"), nil
+	return presences, diffs, nil
 }

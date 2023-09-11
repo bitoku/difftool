@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/google/go-cmp/cmp"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -14,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
@@ -52,7 +54,35 @@ func unmarshall(data []byte, v any) error {
 	return err
 }
 
+func getMapper(config *rest.Config) (meta.RESTMapper, error) {
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+	groupResources, err := restmapper.GetAPIGroupResources(discoveryClient)
+	if err != nil {
+		return nil, err
+	}
+	mapper := restmapper.NewDiscoveryRESTMapper(groupResources)
+	return mapper, nil
+}
+
+func loadYaml(path string, v any) error {
+	file, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	return unmarshall(file, v)
+}
+
 func main() {
+	err := run()
+	if err != nil {
+		panic(err.Error())
+	}
+}
+
+func run() error {
 	// read cmd flags
 	var kubeconfig *string
 	if home := homedir.HomeDir(); home != "" {
@@ -65,21 +95,17 @@ func main() {
 
 	// read settings yaml
 	if *targetPath == "" {
-		panic("--target option is required")
+		return fmt.Errorf("--target option is required")
 	}
 	targetAbsPath, err := filepath.Abs(*targetPath)
 	if err != nil {
-		panic(err.Error())
-	}
-	file, err := os.ReadFile(targetAbsPath)
-	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	var targets []*Target
-	err = yaml.Unmarshal(file, &targets)
+	err = loadYaml(*targetPath, &targets)
 	if err != nil {
-		panic(err.Error())
+		return fmt.Errorf("unable to load target yaml: %s", err.Error())
 	}
 
 	// make manifest path absolute path
@@ -93,60 +119,56 @@ func main() {
 	// create a mapper to get a gvr
 	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
-	discoveryClient, err := discovery.NewDiscoveryClientForConfig(config)
+
+	mapper, err := getMapper(config)
 	if err != nil {
-		panic(err.Error())
+		return fmt.Errorf("failed to get RESTMapper: %s", err.Error())
 	}
-	groupResources, err := restmapper.GetAPIGroupResources(discoveryClient)
-	if err != nil {
-		panic(err.Error())
-	}
-	mapper := restmapper.NewDiscoveryRESTMapper(groupResources)
 
 	// create the client
 	client, err := dynamic.NewForConfig(config)
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	for _, target := range targets {
 		var obj objdiff.Object
-		fmt.Println(filepath.Base(target.Manifest))
-		content, err := os.ReadFile(target.Manifest)
-		if err != nil {
-			panic(err.Error())
-		}
+		fmt.Printf("# %s\n", filepath.Base(target.Manifest))
 
-		err = unmarshall(content, &obj)
+		err = loadYaml(target.Manifest, &obj)
 		if err != nil {
-			panic(err.Error())
+			return fmt.Errorf("failed to load object: %s", err.Error())
 		}
 
 		resource, err := getResource(target.APIVersion, target.Kind, mapper)
 		if err != nil {
-			panic(err.Error())
+			return err
 		}
 
 		//check the diff
-		var diff string
+		var diffs, presences []string
 		opts := []cmp.Option{objdiff.IgnoreMapEntries(target.Ignore)}
-		if err != nil {
-			panic(err.Error())
-		}
+
 		if obj.IsList() {
-			diff, err = objdiff.CheckList(&obj, client, resource, opts...)
+			presences, diffs, err = objdiff.CheckList(&obj, client, resource, opts...)
 		} else {
-			diff, err = objdiff.CheckObj(&obj, client, resource, opts...)
+			presences, diffs, err = objdiff.CheckObj(&obj, client, resource, opts...)
 		}
 		if err != nil {
-			panic(err.Error())
+			return err
 		}
-		if diff == "" {
-			fmt.Println("No diff\n")
-		} else {
-			fmt.Println(diff)
+		if len(presences) == 0 && len(diffs) == 0 {
+			fmt.Printf("No diff.\n\n")
+			continue
+		}
+		if len(presences) != 0 {
+			fmt.Printf("%s\n", strings.Join(presences, ""))
+		}
+		if len(diffs) != 0 {
+			fmt.Printf("%s\n", strings.Join(diffs, "\n"))
 		}
 	}
+	return nil
 }
