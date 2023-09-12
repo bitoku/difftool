@@ -3,11 +3,11 @@ items:
   - apiVersion: operator.openshift.io/v1alpha1
     kind: ImageContentSourcePolicy
     metadata:
-      creationTimestamp: "2023-08-29T10:13:20Z"
+      creationTimestamp: "2023-09-12T10:41:17Z"
       generation: 1
       name: image-policy-0
-      resourceVersion: "1249"
-      uid: 7b75d2da-eebc-487e-a37a-3c382d8a7ea7
+      resourceVersion: "971"
+      uid: e90ac741-4cc9-4707-ab64-0f429d4e22df
     spec:
       repositoryDigestMirrors:
         - mirrors:
@@ -16,11 +16,11 @@ items:
   - apiVersion: operator.openshift.io/v1alpha1
     kind: ImageContentSourcePolicy
     metadata:
-      creationTimestamp: "2023-08-29T10:13:20Z"
+      creationTimestamp: "2023-09-12T10:41:17Z"
       generation: 1
       name: image-policy-1
-      resourceVersion: "1272"
-      uid: c04d2f99-90bb-4f36-9f10-b2f672be8219
+      resourceVersion: "996"
+      uid: 8366be98-4e02-4252-b970-b7af77df9143
     spec:
       repositoryDigestMirrors:
         - mirrors:
@@ -29,11 +29,11 @@ items:
   - apiVersion: operator.openshift.io/v1alpha1
     kind: ImageContentSourcePolicy
     metadata:
-      creationTimestamp: "2023-08-29T10:13:20Z"
+      creationTimestamp: "2023-09-12T10:41:18Z"
       generation: 1
       name: image-policy-2
-      resourceVersion: "1285"
-      uid: cf056de3-dee3-4bc2-aae0-10cb7978e261
+      resourceVersion: "1002"
+      uid: b887dcf6-8a85-4ee6-82cc-49a43d7c01af
     spec:
       repositoryDigestMirrors:
         - mirrors:

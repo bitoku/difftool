@@ -6,7 +6,7 @@
   manifest: ./default/kubeletconfig.yaml
 - apiVersion: operator.openshift.io/v1alpha1
   kind: ImageContentSourcePolicy
-  manifest: ./default/imagecontentresourcepolicy.yaml
+  manifest: ./default/imagecontentsourcepolicy.yaml
 - apiVersion: config.openshift.io/v1
   kind: Proxy
   manifest: ./default/proxy.yaml

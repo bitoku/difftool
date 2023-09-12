@@ -1,18 +1,18 @@
 apiVersion: machineconfiguration.openshift.io/v1
 kind: MachineConfigPool
 metadata:
-  creationTimestamp: "2023-08-29T10:15:47Z"
-  generation: 2
+  creationTimestamp: "2023-09-12T10:48:06Z"
+  generation: 4
   labels:
     machineconfiguration.openshift.io/mco-built-in: ""
     operator.machineconfiguration.openshift.io/required-for-upgrade: ""
     pools.operator.machineconfiguration.openshift.io/master: ""
   name: master
-  resourceVersion: "9219"
-  uid: 00124f9d-01aa-48b4-84a1-dcf66c9f1305
+  resourceVersion: "54736"
+  uid: 01e0862c-51c5-40b7-bcfa-6b643f7d8f40
 spec:
   configuration:
-    name: rendered-master-28a13b75963d8d1754151f7998438245
+    name: rendered-master-b4578b641b1f491140c051e65892fa06
     source:
       - apiVersion: machineconfiguration.openshift.io/v1
         kind: MachineConfig
@@ -26,6 +26,9 @@ spec:
       - apiVersion: machineconfiguration.openshift.io/v1
         kind: MachineConfig
         name: 99-master-aro-dns
+      - apiVersion: machineconfiguration.openshift.io/v1
+        kind: MachineConfig
+        name: 99-master-generated-crio-add-inheritable-capabilities
       - apiVersion: machineconfiguration.openshift.io/v1
         kind: MachineConfig
         name: 99-master-generated-registries
@@ -41,33 +44,33 @@ spec:
   paused: false
 status:
   conditions:
-    - lastTransitionTime: "2023-08-29T10:16:26Z"
+    - lastTransitionTime: "2023-09-12T10:48:45Z"
       message: ""
       reason: ""
       status: "False"
       type: RenderDegraded
-    - lastTransitionTime: "2023-08-29T10:16:55Z"
-      message: All nodes are updated with rendered-master-28a13b75963d8d1754151f7998438245
-      reason: ""
-      status: "True"
-      type: Updated
-    - lastTransitionTime: "2023-08-29T10:16:55Z"
-      message: ""
-      reason: ""
-      status: "False"
-      type: Updating
-    - lastTransitionTime: "2023-08-29T10:16:55Z"
+    - lastTransitionTime: "2023-09-12T10:49:33Z"
       message: ""
       reason: ""
       status: "False"
       type: NodeDegraded
-    - lastTransitionTime: "2023-08-29T10:16:55Z"
+    - lastTransitionTime: "2023-09-12T10:49:33Z"
       message: ""
       reason: ""
       status: "False"
       type: Degraded
+    - lastTransitionTime: "2023-09-12T11:34:58Z"
+      message: All nodes are updated with rendered-master-b4578b641b1f491140c051e65892fa06
+      reason: ""
+      status: "True"
+      type: Updated
+    - lastTransitionTime: "2023-09-12T11:34:58Z"
+      message: ""
+      reason: ""
+      status: "False"
+      type: Updating
   configuration:
-    name: rendered-master-28a13b75963d8d1754151f7998438245
+    name: rendered-master-b4578b641b1f491140c051e65892fa06
     source:
       - apiVersion: machineconfiguration.openshift.io/v1
         kind: MachineConfig
@@ -83,13 +86,16 @@ status:
         name: 99-master-aro-dns
       - apiVersion: machineconfiguration.openshift.io/v1
         kind: MachineConfig
+        name: 99-master-generated-crio-add-inheritable-capabilities
+      - apiVersion: machineconfiguration.openshift.io/v1
+        kind: MachineConfig
         name: 99-master-generated-registries
       - apiVersion: machineconfiguration.openshift.io/v1
         kind: MachineConfig
         name: 99-master-ssh
   degradedMachineCount: 0
   machineCount: 3
-  observedGeneration: 2
+  observedGeneration: 4
   readyMachineCount: 3
   unavailableMachineCount: 0
   updatedMachineCount: 3

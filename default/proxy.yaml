@@ -1,11 +1,12 @@
 apiVersion: config.openshift.io/v1
 kind: Proxy
 metadata:
-  creationTimestamp: "2023-08-29T10:12:54Z"
+  creationTimestamp: "2023-09-12T10:40:52Z"
   generation: 1
   name: cluster
-  resourceVersion: "564"
-  uid: ba08af1a-a4ae-4dfe-8aeb-bed3cbc2b598
+  resourceVersion: "552"
+  uid: 03d62c25-0c2a-424e-bedf-734159f67f6c
 spec:
   trustedCA:
     name: ""
+status: {}

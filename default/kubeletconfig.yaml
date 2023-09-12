@@ -1,19 +1,37 @@
 apiVersion: v1
-kind: List
 items:
-- apiVersion: machineconfiguration.openshift.io/v1
-  kind: KubeletConfig
-  metadata:
-    name: aro-limits
-  spec:
-    kubeletConfig:
-      evictionHard:
-        imagefs.available: 15%
-        memory.available: 500Mi
-        nodefs.available: 10%
-        nodefs.inodesFree: 5%
-      systemReserved:
-        memory: 2000Mi
-    machineConfigPoolSelector:
-      matchLabels:
+  - apiVersion: machineconfiguration.openshift.io/v1
+    kind: KubeletConfig
+    metadata:
+      annotations:
+        machineconfiguration.openshift.io/mc-name-suffix: ""
+      creationTimestamp: "2023-09-12T11:15:52Z"
+      finalizers:
+        - 99-worker-generated-kubelet
+      generation: 1
+      labels:
         aro.openshift.io/limits: ""
+      name: aro-limits
+      resourceVersion: "42586"
+      uid: bf542e1b-7f37-4e5f-802e-b01811ab423e
+    spec:
+      kubeletConfig:
+        evictionHard:
+          imagefs.available: 15%
+          memory.available: 500Mi
+          nodefs.available: 10%
+          nodefs.inodesFree: 5%
+        systemReserved:
+          memory: 2000Mi
+      machineConfigPoolSelector:
+        matchLabels:
+          aro.openshift.io/limits: ""
+    status:
+      conditions:
+        - lastTransitionTime: "2023-09-12T11:22:24Z"
+          message: Success
+          status: "True"
+          type: Success
+kind: List
+metadata:
+  resourceVersion: ""

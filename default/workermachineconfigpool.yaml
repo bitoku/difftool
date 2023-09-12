@@ -1,18 +1,18 @@
 apiVersion: machineconfiguration.openshift.io/v1
 kind: MachineConfigPool
 metadata:
-  creationTimestamp: "2023-08-29T10:15:47Z"
-  generation: 3
+  creationTimestamp: "2023-09-12T10:48:06Z"
+  generation: 5
   labels:
     aro.openshift.io/limits: ""
     machineconfiguration.openshift.io/mco-built-in: ""
     pools.operator.machineconfiguration.openshift.io/worker: ""
   name: worker
-  resourceVersion: "38909"
-  uid: 9ffd2a25-675d-423c-a971-061a141a6747
+  resourceVersion: "59051"
+  uid: c2066a3d-406e-404b-b145-2736a4c03315
 spec:
   configuration:
-    name: rendered-worker-dc1b500ba088f2a07c7e88fbfe53b58a
+    name: rendered-worker-77ec2d9ce2ecd109c27fae4b8ffb553e
     source:
       - apiVersion: machineconfiguration.openshift.io/v1
         kind: MachineConfig
@@ -29,6 +29,9 @@ spec:
       - apiVersion: machineconfiguration.openshift.io/v1
         kind: MachineConfig
         name: 99-worker-aro-dns
+      - apiVersion: machineconfiguration.openshift.io/v1
+        kind: MachineConfig
+        name: 99-worker-generated-crio-add-inheritable-capabilities
       - apiVersion: machineconfiguration.openshift.io/v1
         kind: MachineConfig
         name: 99-worker-generated-kubelet
@@ -47,33 +50,33 @@ spec:
   paused: false
 status:
   conditions:
-    - lastTransitionTime: "2023-08-29T10:16:26Z"
+    - lastTransitionTime: "2023-09-12T10:48:45Z"
       message: ""
       reason: ""
       status: "False"
       type: RenderDegraded
-    - lastTransitionTime: "2023-08-29T10:16:31Z"
+    - lastTransitionTime: "2023-09-12T10:48:50Z"
       message: ""
       reason: ""
       status: "False"
       type: NodeDegraded
-    - lastTransitionTime: "2023-08-29T10:16:31Z"
+    - lastTransitionTime: "2023-09-12T10:48:50Z"
       message: ""
       reason: ""
       status: "False"
       type: Degraded
-    - lastTransitionTime: "2023-08-29T10:46:30Z"
-      message: All nodes are updated with rendered-worker-dc1b500ba088f2a07c7e88fbfe53b58a
+    - lastTransitionTime: "2023-09-12T11:40:13Z"
+      message: All nodes are updated with rendered-worker-77ec2d9ce2ecd109c27fae4b8ffb553e
       reason: ""
       status: "True"
       type: Updated
-    - lastTransitionTime: "2023-08-29T10:46:30Z"
+    - lastTransitionTime: "2023-09-12T11:40:13Z"
       message: ""
       reason: ""
       status: "False"
       type: Updating
   configuration:
-    name: rendered-worker-dc1b500ba088f2a07c7e88fbfe53b58a
+    name: rendered-worker-77ec2d9ce2ecd109c27fae4b8ffb553e
     source:
       - apiVersion: machineconfiguration.openshift.io/v1
         kind: MachineConfig
@@ -92,6 +95,9 @@ status:
         name: 99-worker-aro-dns
       - apiVersion: machineconfiguration.openshift.io/v1
         kind: MachineConfig
+        name: 99-worker-generated-crio-add-inheritable-capabilities
+      - apiVersion: machineconfiguration.openshift.io/v1
+        kind: MachineConfig
         name: 99-worker-generated-kubelet
       - apiVersion: machineconfiguration.openshift.io/v1
         kind: MachineConfig
@@ -101,7 +107,7 @@ status:
         name: 99-worker-ssh
   degradedMachineCount: 0
   machineCount: 3
-  observedGeneration: 3
+  observedGeneration: 5
   readyMachineCount: 3
   unavailableMachineCount: 0
   updatedMachineCount: 3
