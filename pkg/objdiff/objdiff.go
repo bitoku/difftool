@@ -6,8 +6,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/google/go-cmp/cmp"
-	"k8s.io/apimachinery/pkg/api/errors"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -78,11 +79,11 @@ func IgnoreMapEntries(ignoredKeys []string) cmp.Option {
 func GetRESTMapper(config *rest.Config) (meta.RESTMapper, error) {
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(config)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	groupResources, err := restmapper.GetAPIGroupResources(discoveryClient)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	mapper := restmapper.NewDiscoveryRESTMapper(groupResources)
 	return mapper, nil
@@ -95,7 +96,7 @@ func compare(a, b *Object, opts ...cmp.Option) string {
 func unmarshallUnstructured(u *unstructured.Unstructured, v any) error {
 	rawJson, err := u.MarshalJSON()
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	return json.Unmarshal(rawJson, v)
 }
@@ -105,17 +106,17 @@ func (d *Diff) diffObj(resource schema.GroupVersionResource, obj *Object, opts .
 	resp, err := d.client.
 		Resource(resource).
 		Get(context.Background(), obj.Name, v1.GetOptions{})
-	if errors.IsNotFound(err) {
+	if kerrors.IsNotFound(err) {
 		return []string{fmt.Sprintf("- %s is not found\n", obj)}, []string{}, nil
 	}
 	if err != nil {
-		return []string{}, []string{}, err
+		return []string{}, []string{}, errors.WithStack(err)
 	}
 
 	curr := new(Object)
 	err = unmarshallUnstructured(resp, curr)
 	if err != nil {
-		return []string{}, []string{}, err
+		return []string{}, []string{}, errors.WithStack(err)
 	}
 	diff := compare(obj, curr, opts...)
 	if diff != "" {
@@ -129,7 +130,7 @@ func (d *Diff) diffList(resource schema.GroupVersionResource, obj *Object, opts 
 		Resource(resource).
 		List(context.Background(), v1.ListOptions{})
 	if err != nil {
-		return []string{}, []string{}, err
+		return []string{}, []string{}, errors.WithStack(err)
 	}
 
 	m := make(map[string]*Object)
@@ -138,7 +139,7 @@ func (d *Diff) diffList(resource schema.GroupVersionResource, obj *Object, opts 
 		curr := new(Object)
 		err = unmarshallUnstructured(&i, curr)
 		if err != nil {
-			return []string{}, []string{}, err
+			return []string{}, []string{}, errors.WithStack(err)
 		}
 		m[curr.String()] = curr
 		checked[curr.String()] = false
