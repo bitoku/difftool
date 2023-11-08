@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/fatih/color"
 	"github.com/google/go-cmp/cmp"
 	"k8s.io/apimachinery/pkg/api/meta"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -156,6 +157,12 @@ func run() error {
 		return errors.WithStack(err)
 	}
 
+	// set color
+	success := color.New(color.FgGreen)
+	warn := color.New(color.FgYellow)
+	fail := color.New(color.FgRed)
+	bold := color.New(color.Bold)
+
 	versions := getAvailableVersions(opts.ManifestDir)
 
 	// read targetList.yaml
@@ -190,11 +197,11 @@ Loop:
 		manifest := filepath.Join(opts.ManifestDir, opts.Version.String(), target.Manifest)
 		err = loadYaml(manifest, &obj)
 		if err != nil && !os.IsNotExist(errors.Cause(err)) {
-			_, _ = fmt.Fprintf(os.Stderr, "skipped with error: %+v", err)
+			warn.Fprintf(os.Stderr, "skipped with error: %+v", err)
 			continue Loop
 		}
 		if os.IsNotExist(errors.Cause(err)) {
-			_, _ = fmt.Fprintf(os.Stderr, "file not found: %s\n", target.Manifest)
+			warn.Fprintf(os.Stderr, "file not found: %s\n", target.Manifest)
 			// fallback if the option is set, otherwise skip the comparison
 			if opts.Fallback {
 				prioritized := fallbackPriority(opts.Version, versions)
@@ -205,10 +212,10 @@ Loop:
 						return errors.WithStack(err)
 					}
 					if os.IsNotExist(errors.Cause(err)) {
-						_, _ = fmt.Fprintf(os.Stderr, "skipped with error: %+v", err)
+						warn.Fprintf(os.Stderr, "skipped with error: %+v", err)
 						continue Loop
 					}
-					_, _ = fmt.Fprintf(os.Stderr, "use %s instead of %s\n", v, opts.Version)
+					warn.Fprintf(os.Stderr, "use %s instead of %s\n", v, opts.Version)
 					break
 				}
 			} else {
@@ -219,7 +226,7 @@ Loop:
 
 		resource, err := getResource(target.APIVersion, target.Kind, mapper)
 		if err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "skipped with error: %+v", err)
+			warn.Fprintf(os.Stderr, "skipped with error: %+v", err)
 			continue Loop
 		}
 
@@ -227,22 +234,22 @@ Loop:
 		diffOpts := []cmp.Option{objdiff.IgnoreMapEntries(target.Ignore)}
 		presences, diffs, err := d.Diff(resource, &obj, diffOpts...)
 		if err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "skipped with error: %+v", err)
+			warn.Fprintf(os.Stderr, "skipped with error: %+v", err)
 			continue Loop
 		}
 
 		// format output
-		fmt.Printf("# %s\n", filepath.Base(target.Manifest))
+		bold.Printf("# %s\n", filepath.Base(target.Manifest))
 
 		if len(presences) == 0 && len(diffs) == 0 {
-			fmt.Printf("No diff.\n\n")
+			success.Printf("No diff.\n\n")
 			continue
 		}
 		if len(presences) != 0 {
-			fmt.Printf("%s\n", strings.Join(presences, ""))
+			fail.Printf("%s\n", strings.Join(presences, ""))
 		}
 		if len(diffs) != 0 {
-			fmt.Printf("%s\n", strings.Join(diffs, "\n"))
+			fail.Printf("%s\n", strings.Join(diffs, "\n"))
 		}
 	}
 	return nil
