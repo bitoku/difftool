@@ -1,0 +1,4 @@
+NAME                       PHASE     TYPE              REGION   ZONE   AGE
+diff-4-12-vl75m-master-0   Running   Standard_D8s_v3   eastus   1      9h
+diff-4-12-vl75m-master-1   Running   Standard_D8s_v3   eastus   2      9h
+diff-4-12-vl75m-master-2   Running   Standard_D8s_v3   eastus   3      9h

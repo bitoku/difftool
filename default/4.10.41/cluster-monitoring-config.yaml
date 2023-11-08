@@ -1,0 +1,11 @@
+apiVersion: v1
+data:
+  config.yaml: |
+    {}
+kind: ConfigMap
+metadata:
+  creationTimestamp: "2023-11-06T09:17:42Z"
+  name: cluster-monitoring-config
+  namespace: openshift-monitoring
+  resourceVersion: "28561"
+  uid: c235db1b-c158-4a2b-9fc3-edfe17af4a23

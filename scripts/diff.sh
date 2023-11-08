@@ -1,4 +1,4 @@
-for file in default/*; do
+for file in default/4.12.*; do
   echo $file
-  go run hack/compare.go default/4.11.26/dns.yaml $file/dns.yaml
+  go run hack/compare.go default/4.12.25/kubeletconfig.yaml $file/kubeletconfig.yaml
 done

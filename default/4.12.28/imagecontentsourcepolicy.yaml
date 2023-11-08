@@ -1,0 +1,44 @@
+apiVersion: v1
+items:
+- apiVersion: operator.openshift.io/v1alpha1
+  kind: ImageContentSourcePolicy
+  metadata:
+    creationTimestamp: "2023-11-07T08:24:10Z"
+    generation: 1
+    name: image-policy-0
+    resourceVersion: "1239"
+    uid: 6cade13d-3994-407b-ba14-35156b265a4c
+  spec:
+    repositoryDigestMirrors:
+    - mirrors:
+      - arosvc.azurecr.io/openshift-release-dev/ocp-release
+      source: quay.io/openshift-release-dev/ocp-release
+- apiVersion: operator.openshift.io/v1alpha1
+  kind: ImageContentSourcePolicy
+  metadata:
+    creationTimestamp: "2023-11-07T08:24:11Z"
+    generation: 1
+    name: image-policy-1
+    resourceVersion: "1240"
+    uid: 91d69a5b-ed3b-4555-99f9-a960af5922b4
+  spec:
+    repositoryDigestMirrors:
+    - mirrors:
+      - arosvc.azurecr.io/openshift-release-dev/ocp-release-nightly
+      source: quay.io/openshift-release-dev/ocp-release-nightly
+- apiVersion: operator.openshift.io/v1alpha1
+  kind: ImageContentSourcePolicy
+  metadata:
+    creationTimestamp: "2023-11-07T08:24:11Z"
+    generation: 1
+    name: image-policy-2
+    resourceVersion: "1244"
+    uid: 4f39edb4-4d7e-4c48-acdf-b1cae400065f
+  spec:
+    repositoryDigestMirrors:
+    - mirrors:
+      - arosvc.azurecr.io/openshift-release-dev/ocp-v4.0-art-dev
+      source: quay.io/openshift-release-dev/ocp-v4.0-art-dev
+kind: List
+metadata:
+  resourceVersion: ""

@@ -1,0 +1,30 @@
+apiVersion: v1
+items:
+- apiVersion: machineconfiguration.openshift.io/v1
+  kind: KubeletConfig
+  metadata:
+    annotations:
+      machineconfiguration.openshift.io/mc-name-suffix: ""
+    creationTimestamp: "2023-11-07T06:11:39Z"
+    finalizers:
+    - 99-master-generated-kubelet
+    - 99-worker-generated-kubelet
+    generation: 1
+    name: dynamic-node
+    resourceVersion: "481475"
+    uid: c4c4baf0-3d67-4c3f-9f31-a0b405e0eb61
+  spec:
+    autoSizingReserved: true
+    machineConfigPoolSelector:
+      matchExpressions:
+      - key: machineconfiguration.openshift.io/mco-built-in
+        operator: Exists
+  status:
+    conditions:
+    - lastTransitionTime: "2023-11-07T18:24:20Z"
+      message: Success
+      status: "True"
+      type: Success
+kind: List
+metadata:
+  resourceVersion: ""

@@ -56,7 +56,7 @@ function fetch_configs () {
   oc get containerruntimeconfig -o yaml > "$out/containerruntimeconfig.yaml"
   oc get mcp -o yaml > "$out/machineconfigpool.yaml"
   oc get configmap -n openshift-monitoring cluster-monitoring-config -o yaml > "$out/cluster-monitoring-config.yaml"
-  oc get machine -n openshift-machine-api -l machine.openshift.io/cluster-api-machine-role=master > "$out/master-machines.yaml"
+  oc get machine -n openshift-machine-api -l machine.openshift.io/cluster-api-machine-role=master -o yaml > "$out/master-machines.yaml"
   echo "Fetch done"
 }
 

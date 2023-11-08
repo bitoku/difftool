@@ -1,0 +1,52 @@
+apiVersion: v1
+items:
+- apiVersion: operator.openshift.io/v1
+  kind: DNS
+  metadata:
+    creationTimestamp: "2023-11-07T05:51:13Z"
+    finalizers:
+    - dns.operator.openshift.io/dns-controller
+    generation: 1
+    name: default
+    resourceVersion: "579451"
+    uid: 42574221-6ed5-4ca2-a8a0-2119e6eb4d63
+  spec:
+    logLevel: Normal
+    nodePlacement: {}
+    operatorLogLevel: Normal
+    upstreamResolvers:
+      policy: Sequential
+      transportConfig: {}
+      upstreams:
+      - port: 53
+        type: SystemResolvConf
+  status:
+    clusterDomain: cluster.local
+    clusterIP: 172.30.0.10
+    conditions:
+    - lastTransitionTime: "2023-11-07T16:49:10Z"
+      message: Enough DNS pods are available, and the DNS service has a cluster IP
+        address.
+      reason: AsExpected
+      status: "False"
+      type: Degraded
+    - lastTransitionTime: "2023-11-07T20:47:42Z"
+      message: All DNS and node-resolver pods are available, and the DNS service has
+        a cluster IP address.
+      reason: AsExpected
+      status: "False"
+      type: Progressing
+    - lastTransitionTime: "2023-11-07T05:58:11Z"
+      message: The DNS daemonset has available pods, and the DNS service has a cluster
+        IP address.
+      reason: AsExpected
+      status: "True"
+      type: Available
+    - lastTransitionTime: "2023-11-07T05:51:13Z"
+      message: DNS Operator can be upgraded
+      reason: AsExpected
+      status: "True"
+      type: Upgradeable
+kind: List
+metadata:
+  resourceVersion: ""

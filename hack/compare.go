@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/cockroachdb/errors"
-	"github.com/google/go-cmp/cmp"
 	"k8s.io/apimachinery/pkg/util/yaml"
 
 	"difftool/pkg/objdiff"
@@ -43,7 +42,10 @@ func main() {
 		panic(err.Error())
 	}
 	if obj1.IsList() {
-
+		p, d := objdiff.DiffList(obj1.Items, obj2.Items)
+		fmt.Printf("%v\n", p)
+		fmt.Printf("%v\n", d)
+	} else {
+		fmt.Println(objdiff.DiffObj(&obj1, &obj2))
 	}
-	fmt.Println(cmp.Diff(obj1.Spec, obj2.Spec))
 }
