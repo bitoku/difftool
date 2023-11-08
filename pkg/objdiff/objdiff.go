@@ -54,9 +54,61 @@ func New(client dynamic.Interface) *Diff {
 
 func (d *Diff) Diff(resource schema.GroupVersionResource, obj *Object, opts ...cmp.Option) ([]string, []string, error) {
 	if obj.IsList() {
-		return d.diffList(resource, obj, opts...)
+		remote, err := d.getRemoteObjs(resource)
+		if err != nil {
+			return nil, nil, errors.WithStack(err)
+		}
+		presences, diffs := DiffList(obj.Items, remote, opts...)
+		return presences, diffs, nil
 	}
-	return d.diffObj(resource, obj, opts...)
+	remote, err := d.getRemoteObj(resource, obj)
+	if kerrors.IsNotFound(errors.Cause(err)) {
+		return []string{fmt.Sprintf("- %s is not found\n", obj)}, []string{}, nil
+	}
+	if err != nil {
+		return nil, nil, errors.WithStack(err)
+	}
+	diff := DiffObj(obj, remote)
+	if diff != "" {
+		return []string{}, []string{diff}, nil
+	}
+	return []string{}, []string{}, nil
+}
+
+func (d *Diff) getRemoteObjs(resource schema.GroupVersionResource) ([]*Object, error) {
+	resp, err := d.client.
+		Resource(resource).
+		List(context.Background(), v1.ListOptions{})
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	out := make([]*Object, 0)
+	for _, i := range resp.Items {
+		newObj := new(Object)
+		err = unmarshallUnstructured(&i, newObj)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		out = append(out, newObj)
+	}
+	return out, nil
+}
+
+func (d *Diff) getRemoteObj(resource schema.GroupVersionResource, obj *Object) (*Object, error) {
+	resp, err := d.client.
+		Resource(resource).
+		Get(context.Background(), obj.Name, v1.GetOptions{})
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	newObj := new(Object)
+	err = unmarshallUnstructured(resp, newObj)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return newObj, nil
 }
 
 func IgnoreMapEntries(ignoredKeys []string) cmp.Option {
@@ -89,10 +141,6 @@ func GetRESTMapper(config *rest.Config) (meta.RESTMapper, error) {
 	return mapper, nil
 }
 
-func compare(a, b *Object, opts ...cmp.Option) string {
-	return cmp.Diff(a.Spec, b.Spec, opts...)
-}
-
 func unmarshallUnstructured(u *unstructured.Unstructured, v any) error {
 	rawJson, err := u.MarshalJSON()
 	if err != nil {
@@ -101,66 +149,34 @@ func unmarshallUnstructured(u *unstructured.Unstructured, v any) error {
 	return json.Unmarshal(rawJson, v)
 }
 
-func (d *Diff) diffObj(resource schema.GroupVersionResource, obj *Object, opts ...cmp.Option) (presences, diffs []string, err error) {
-	// get the current manifest
-	resp, err := d.client.
-		Resource(resource).
-		Get(context.Background(), obj.Name, v1.GetOptions{})
-	if kerrors.IsNotFound(err) {
-		return []string{fmt.Sprintf("- %s is not found\n", obj)}, []string{}, nil
-	}
-	if err != nil {
-		return []string{}, []string{}, errors.WithStack(err)
-	}
-
-	curr := new(Object)
-	err = unmarshallUnstructured(resp, curr)
-	if err != nil {
-		return []string{}, []string{}, errors.WithStack(err)
-	}
-	diff := compare(obj, curr, opts...)
-	if diff != "" {
-		diffs = append(diffs, diff)
-	}
-	return []string{}, diffs, nil
+func DiffObj(obj1, obj2 *Object, opts ...cmp.Option) string {
+	return cmp.Diff(obj1.Spec, obj2.Spec, opts...)
 }
 
-func (d *Diff) diffList(resource schema.GroupVersionResource, obj *Object, opts ...cmp.Option) (presences, diffs []string, err error) {
-	resp, err := d.client.
-		Resource(resource).
-		List(context.Background(), v1.ListOptions{})
-	if err != nil {
-		return []string{}, []string{}, errors.WithStack(err)
-	}
-
+func DiffList(obj1, obj2 []*Object, opts ...cmp.Option) (presences, diffs []string) {
 	m := make(map[string]*Object)
 	checked := make(map[string]bool)
-	for _, i := range resp.Items {
-		curr := new(Object)
-		err = unmarshallUnstructured(&i, curr)
-		if err != nil {
-			return []string{}, []string{}, errors.WithStack(err)
-		}
-		m[curr.String()] = curr
-		checked[curr.String()] = false
+	for _, o := range obj1 {
+		m[o.String()] = o
+		checked[o.String()] = false
 	}
-	for _, i := range obj.Items {
-		curr, ok := m[i.String()]
+	for _, o2 := range obj2 {
+		o1, ok := m[o2.String()]
 		if !ok {
-			presences = append(presences, fmt.Sprintf("- %s is not found\n", i))
+			presences = append(presences, fmt.Sprintf("- %s is not found\n", o2))
 			continue
 		}
-		checked[curr.String()] = true
-		diff := compare(i, curr, opts...)
+		checked[o2.String()] = true
+		diff := DiffObj(o1, o2, opts...)
 		if diff == "" {
 			continue
 		}
-		diffs = append(diffs, fmt.Sprintf("%s\n%s", i.String(), diff))
+		diffs = append(diffs, fmt.Sprintf("%s\n%s", o2.String(), diff))
 	}
 	for k, v := range m {
 		if !checked[k] {
 			presences = append(presences, fmt.Sprintf("+ %s is found, but not in default\n", v))
 		}
 	}
-	return presences, diffs, nil
+	return presences, diffs
 }
