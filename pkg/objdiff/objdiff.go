@@ -41,26 +41,41 @@ func (o *Object) String() string {
 }
 
 type Differ interface {
-	Diff(resource schema.GroupVersionResource, obj *Object, opts ...cmp.Option) ([]string, []string, error)
+	Diff(apiVersion, kind string, obj *Object, opts ...cmp.Option) ([]string, []string, error)
 }
 
 type Diff struct {
 	client dynamic.Interface
+	mapper meta.RESTMapper
 }
 
-func New(client dynamic.Interface) *Diff {
-	return &Diff{client: client}
-}
-
-func (d *Diff) Diff(resource schema.GroupVersionResource, obj *Object, opts ...cmp.Option) ([]string, []string, error) {
-	if obj.IsList() {
-		remote, err := d.getRemoteObjs(resource)
-		if err != nil {
-			return nil, nil, errors.WithStack(err)
-		}
-		presences, diffs := DiffList(obj.Items, remote, opts...)
-		return presences, diffs, nil
+func New(config *rest.Config) (*Diff, error) {
+	mapper, err := getRESTMapper(config)
+	if err != nil {
+		return nil, errors.WithStack(err)
 	}
+
+	client, err := dynamic.NewForConfig(config)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	return &Diff{client: client, mapper: mapper}, nil
+}
+
+func (d *Diff) Diff(apiVersion, kind string, obj *Object, opts ...cmp.Option) ([]string, []string, error) {
+	resource, err := d.getResource(apiVersion, kind)
+	if err != nil {
+		return nil, nil, errors.WithStack(err)
+	}
+
+	if obj.IsList() {
+		return d.diffList(resource, obj, opts...)
+	}
+	return d.diffObj(resource, obj, opts...)
+}
+
+func (d *Diff) diffObj(resource schema.GroupVersionResource, obj *Object, opts ...cmp.Option) ([]string, []string, error) {
 	remote, err := d.getRemoteObj(resource, obj)
 	if kerrors.IsNotFound(errors.Cause(err)) {
 		return []string{fmt.Sprintf("- %s is not found\n", obj)}, []string{}, nil
@@ -68,11 +83,20 @@ func (d *Diff) Diff(resource schema.GroupVersionResource, obj *Object, opts ...c
 	if err != nil {
 		return nil, nil, errors.WithStack(err)
 	}
-	diff := DiffObj(obj, remote)
+	diff := DiffObj(obj, remote, opts...)
 	if diff != "" {
 		return []string{}, []string{diff}, nil
 	}
 	return []string{}, []string{}, nil
+}
+
+func (d *Diff) diffList(resource schema.GroupVersionResource, obj *Object, opts ...cmp.Option) ([]string, []string, error) {
+	remote, err := d.getRemoteObjs(resource)
+	if err != nil {
+		return nil, nil, errors.WithStack(err)
+	}
+	presences, diffs := DiffList(obj.Items, remote, opts...)
+	return presences, diffs, nil
 }
 
 func (d *Diff) getRemoteObjs(resource schema.GroupVersionResource) ([]*Object, error) {
@@ -120,6 +144,20 @@ func (d *Diff) getRemoteObj(resource schema.GroupVersionResource, obj *Object) (
 	return newObj, nil
 }
 
+func (d *Diff) getResource(apiVersion, kind string) (schema.GroupVersionResource, error) {
+	gv, err := schema.ParseGroupVersion(apiVersion)
+	if err != nil {
+		return schema.GroupVersionResource{}, errors.WithStack(err)
+	}
+
+	gvk := gv.WithKind(kind)
+	mapping, err := d.mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+	if err != nil {
+		return schema.GroupVersionResource{}, errors.WithStack(err)
+	}
+	return mapping.Resource, nil
+}
+
 func IgnoreMapEntries(ignoredKeys []string) cmp.Option {
 	filter := func(path cmp.Path) bool {
 		var key []string
@@ -137,7 +175,7 @@ func IgnoreMapEntries(ignoredKeys []string) cmp.Option {
 	return cmp.FilterPath(filter, cmp.Ignore())
 }
 
-func GetRESTMapper(config *rest.Config) (meta.RESTMapper, error) {
+func getRESTMapper(config *rest.Config) (meta.RESTMapper, error) {
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(config)
 	if err != nil {
 		return nil, errors.WithStack(err)

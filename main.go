@@ -11,12 +11,9 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/fatih/color"
 	"github.com/google/go-cmp/cmp"
-	"k8s.io/apimachinery/pkg/api/meta"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/apimachinery/pkg/util/yaml"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
 
@@ -28,20 +25,6 @@ type Target struct {
 	v1.TypeMeta `json:",inline"`
 	Manifest    string   `json:"manifest"`
 	Ignore      []string `json:"ignore"`
-}
-
-func getResource(apiVersion, kind string, mapper meta.RESTMapper) (schema.GroupVersionResource, error) {
-	gv, err := schema.ParseGroupVersion(apiVersion)
-	if err != nil {
-		return schema.GroupVersionResource{}, errors.WithStack(err)
-	}
-
-	gvk := gv.WithKind(kind)
-	mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
-	if err != nil {
-		return schema.GroupVersionResource{}, errors.WithStack(err)
-	}
-	return mapping.Resource, nil
 }
 
 // if we unmarshall yaml directly, int64 is inferred as float64 somehow,
@@ -150,6 +133,42 @@ func getOpts() (*Options, error) {
 	}, nil
 }
 
+func checkTarget(opts *Options, target *Target, d objdiff.Differ) ([]string, []string, error) {
+	var obj objdiff.Object
+
+	versions := getAvailableVersions(opts.ManifestDir)
+
+	manifest := filepath.Join(opts.ManifestDir, opts.Version.String(), target.Manifest)
+	err := loadYaml(manifest, &obj)
+	if err != nil && !os.IsNotExist(errors.Cause(err)) {
+		return nil, nil, errors.Cause(err)
+	}
+	if os.IsNotExist(errors.Cause(err)) {
+		// fallback if the option is set, otherwise skip the comparison
+		if opts.Fallback {
+			prioritized := fallbackPriority(opts.Version, versions)
+			for _, v := range prioritized {
+				manifest = filepath.Join(opts.ManifestDir, v.String(), target.Manifest)
+				err = loadYaml(manifest, &obj)
+				if err != nil && !os.IsNotExist(errors.Cause(err)) {
+					return nil, nil, errors.WithStack(err)
+				}
+				if os.IsNotExist(errors.Cause(err)) {
+					continue
+				}
+				fmt.Fprintf(os.Stderr, "use %s instead of %s\n", v, opts.Version)
+				break
+			}
+		} else {
+			return nil, nil, errors.WithStack(err)
+		}
+	}
+
+	// check the diff
+	diffOpts := []cmp.Option{objdiff.IgnoreMapEntries(target.Ignore)}
+	return d.Diff(target.APIVersion, target.Kind, &obj, diffOpts...)
+}
+
 func run() error {
 	// read cmd flags
 	opts, err := getOpts()
@@ -162,8 +181,6 @@ func run() error {
 	warn := color.New(color.FgYellow)
 	fail := color.New(color.FgRed)
 	bold := color.New(color.Bold)
-
-	versions := getAvailableVersions(opts.ManifestDir)
 
 	// read targetList.yaml
 	var targets []*Target
@@ -178,68 +195,21 @@ func run() error {
 		return errors.WithStack(err)
 	}
 
-	mapper, err := objdiff.GetRESTMapper(config)
+	d, err := objdiff.New(config)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	// create the client
-	client, err := dynamic.NewForConfig(config)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	d := objdiff.New(client)
-Loop:
 	for _, target := range targets {
-		var obj objdiff.Object
-
-		manifest := filepath.Join(opts.ManifestDir, opts.Version.String(), target.Manifest)
-		err = loadYaml(manifest, &obj)
-		if err != nil && !os.IsNotExist(errors.Cause(err)) {
-			warn.Fprintf(os.Stderr, "skipped with error: %+v", err)
-			continue Loop
-		}
-		if os.IsNotExist(errors.Cause(err)) {
-			warn.Fprintf(os.Stderr, "file not found: %s\n", target.Manifest)
-			// fallback if the option is set, otherwise skip the comparison
-			if opts.Fallback {
-				prioritized := fallbackPriority(opts.Version, versions)
-				for _, v := range prioritized {
-					manifest = filepath.Join(opts.ManifestDir, v.String(), target.Manifest)
-					err = loadYaml(manifest, &obj)
-					if err != nil && !os.IsNotExist(errors.Cause(err)) {
-						return errors.WithStack(err)
-					}
-					if os.IsNotExist(errors.Cause(err)) {
-						warn.Fprintf(os.Stderr, "skipped with error: %+v", err)
-						continue Loop
-					}
-					warn.Fprintf(os.Stderr, "use %s instead of %s\n", v, opts.Version)
-					break
-				}
-			} else {
-				// skip the comparison of this target
-				continue
-			}
-		}
-
-		resource, err := getResource(target.APIVersion, target.Kind, mapper)
-		if err != nil {
-			warn.Fprintf(os.Stderr, "skipped with error: %+v", err)
-			continue Loop
-		}
-
-		// check the diff
-		diffOpts := []cmp.Option{objdiff.IgnoreMapEntries(target.Ignore)}
-		presences, diffs, err := d.Diff(resource, &obj, diffOpts...)
-		if err != nil {
-			warn.Fprintf(os.Stderr, "skipped with error: %+v", err)
-			continue Loop
-		}
 
 		// format output
 		bold.Printf("# %s\n", filepath.Base(target.Manifest))
+
+		presences, diffs, err := checkTarget(opts, target, d)
+		if err != nil {
+			warn.Fprintf(os.Stderr, "skipped due to error: %+v\n", err.Error())
+			continue
+		}
 
 		if len(presences) == 0 && len(diffs) == 0 {
 			success.Printf("No diff.\n\n")
