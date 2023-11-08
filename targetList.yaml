@@ -18,3 +18,6 @@
   manifest: machineconfigpool.yaml
   ignore:
     - configuration.name
+- apiVersion: v1
+  kind: ConfigMap
+  manifest: cluster-monitoring-config.yaml

@@ -96,9 +96,18 @@ func (d *Diff) getRemoteObjs(resource schema.GroupVersionResource) ([]*Object, e
 }
 
 func (d *Diff) getRemoteObj(resource schema.GroupVersionResource, obj *Object) (*Object, error) {
-	resp, err := d.client.
-		Resource(resource).
-		Get(context.Background(), obj.Name, v1.GetOptions{})
+	var resp *unstructured.Unstructured
+	var err error
+	if obj.Namespace != "" {
+		resp, err = d.client.
+			Resource(resource).
+			Namespace(obj.Namespace).
+			Get(context.Background(), obj.Name, v1.GetOptions{})
+	} else {
+		resp, err = d.client.
+			Resource(resource).
+			Get(context.Background(), obj.Name, v1.GetOptions{})
+	}
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -150,6 +159,9 @@ func unmarshallUnstructured(u *unstructured.Unstructured, v any) error {
 }
 
 func DiffObj(obj1, obj2 *Object, opts ...cmp.Option) string {
+	if obj1.Kind == "ConfigMap" {
+		return cmp.Diff(obj1.Data, obj2.Data, opts...)
+	}
 	return cmp.Diff(obj1.Spec, obj2.Spec, opts...)
 }
 
