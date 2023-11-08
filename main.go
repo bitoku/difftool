@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -20,6 +20,7 @@ import (
 	"k8s.io/client-go/util/homedir"
 
 	"difftool/pkg/objdiff"
+	"difftool/pkg/util"
 )
 
 type Target struct {
@@ -61,6 +62,35 @@ func loadYaml(path string, v any) error {
 	return unmarshall(file, v)
 }
 
+func getAvailableVersions(dir string) []*util.Version {
+	dirEntry, _ := os.ReadDir(dir)
+	var versions []*util.Version
+	for _, v := range dirEntry {
+		version, err := util.ParseVersion(v.Name())
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stdout, "warning: there is a directory whose name is not a ocp version.: %s", v.Name())
+			continue
+		}
+		versions = append(versions, version)
+	}
+	// return ascending order
+	sort.Slice(versions, func(i, j int) bool {
+		return versions[i].Less(versions[j])
+	})
+	return versions
+}
+
+func fallbackPriority(version *util.Version, available []*util.Version) (out []*util.Version) {
+	idx := sort.Search(len(available), func(i int) bool { return !available[i].Less(version) })
+	for i := idx; i < len(available); i++ {
+		out = append(out, available[i])
+	}
+	for i := idx - 1; i >= 0; i-- {
+		out = append(out, available[i])
+	}
+	return out
+}
+
 func main() {
 	err := run()
 	if err != nil {
@@ -76,7 +106,8 @@ type Options struct {
 	Kubeconfig  string
 	Target      string
 	ManifestDir string
-	Version     string
+	Version     *util.Version
+	Fallback    bool
 }
 
 func getOpts() (*Options, error) {
@@ -88,6 +119,7 @@ func getOpts() (*Options, error) {
 	target := flag.String("target", "", "path to the target list yaml")
 	manifest := flag.String("manifest", "", "path to the directory of default manifests")
 	version := flag.String("cluster-version", "", "cluster version")
+	fallback := flag.Bool("fallback", true, "fallback when the specified version is not available")
 	flag.Parse()
 
 	// validate options
@@ -103,16 +135,17 @@ func getOpts() (*Options, error) {
 	if *version == "" {
 		return nil, fmt.Errorf("--cluster-version option is required")
 	}
-	r := regexp.MustCompile(`4\.\d+\.\d+`)
-	if !r.MatchString(*version) {
-		return nil, fmt.Errorf("version must be in the form of 4.y.z")
+	parsedVersion, err := util.ParseVersion(*version)
+	if err != nil {
+		return nil, errors.Wrap(err, "couldn't parse version")
 	}
 
 	return &Options{
 		Kubeconfig:  *kubeconfig,
 		Target:      *target,
 		ManifestDir: *manifest,
-		Version:     *version,
+		Version:     parsedVersion,
+		Fallback:    *fallback,
 	}, nil
 }
 
@@ -123,19 +156,13 @@ func run() error {
 		return errors.WithStack(err)
 	}
 
+	versions := getAvailableVersions(opts.ManifestDir)
+
 	// read targetList.yaml
 	var targets []*Target
 	err = loadYaml(opts.Target, &targets)
 	if err != nil {
 		return errors.WithStack(err)
-	}
-
-	// normalize manifest paths
-	for _, target := range targets {
-		if filepath.IsAbs(target.Manifest) {
-			continue
-		}
-		target.Manifest = filepath.Join(opts.ManifestDir, opts.Version, target.Manifest)
 	}
 
 	// create a mapper to get a gvr
@@ -156,28 +183,57 @@ func run() error {
 	}
 
 	d := objdiff.New(client)
+Loop:
 	for _, target := range targets {
 		var obj objdiff.Object
-		fmt.Printf("# %s\n", filepath.Base(target.Manifest))
 
-		err = loadYaml(target.Manifest, &obj)
-		if err != nil {
-			return errors.WithStack(err)
+		manifest := filepath.Join(opts.ManifestDir, opts.Version.String(), target.Manifest)
+		err = loadYaml(manifest, &obj)
+		if err != nil && !os.IsNotExist(errors.Cause(err)) {
+			_, _ = fmt.Fprintf(os.Stderr, "skipped with error: %+v", err)
+			continue Loop
+		}
+		if os.IsNotExist(errors.Cause(err)) {
+			_, _ = fmt.Fprintf(os.Stderr, "file not found: %s\n", target.Manifest)
+			// fallback if the option is set, otherwise skip the comparison
+			if opts.Fallback {
+				prioritized := fallbackPriority(opts.Version, versions)
+				for _, v := range prioritized {
+					manifest = filepath.Join(opts.ManifestDir, v.String(), target.Manifest)
+					err = loadYaml(manifest, &obj)
+					if err != nil && !os.IsNotExist(errors.Cause(err)) {
+						return errors.WithStack(err)
+					}
+					if os.IsNotExist(errors.Cause(err)) {
+						_, _ = fmt.Fprintf(os.Stderr, "skipped with error: %+v", err)
+						continue Loop
+					}
+					_, _ = fmt.Fprintf(os.Stderr, "use %s instead of %s\n", v, opts.Version)
+					break
+				}
+			} else {
+				// skip the comparison of this target
+				continue
+			}
 		}
 
 		resource, err := getResource(target.APIVersion, target.Kind, mapper)
 		if err != nil {
-			return errors.WithStack(err)
+			_, _ = fmt.Fprintf(os.Stderr, "skipped with error: %+v", err)
+			continue Loop
 		}
 
 		// check the diff
 		diffOpts := []cmp.Option{objdiff.IgnoreMapEntries(target.Ignore)}
 		presences, diffs, err := d.Diff(resource, &obj, diffOpts...)
 		if err != nil {
-			return errors.WithStack(err)
+			_, _ = fmt.Fprintf(os.Stderr, "skipped with error: %+v", err)
+			continue Loop
 		}
 
 		// format output
+		fmt.Printf("# %s\n", filepath.Base(target.Manifest))
+
 		if len(presences) == 0 && len(diffs) == 0 {
 			fmt.Printf("No diff.\n\n")
 			continue
