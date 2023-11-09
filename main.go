@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -11,6 +12,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/fatih/color"
 	"github.com/google/go-cmp/cmp"
+	configv1 "github.com/openshift/client-go/config/clientset/versioned/typed/config/v1"
+
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -116,12 +119,16 @@ func getOpts() (*Options, error) {
 	if *manifest == "" {
 		return nil, fmt.Errorf("--manifest option is required")
 	}
-	if *version == "" {
-		return nil, fmt.Errorf("--cluster-version option is required")
-	}
-	parsedVersion, err := util.ParseVersion(*version)
-	if err != nil {
-		return nil, errors.Wrap(err, "couldn't parse version")
+
+	var (
+		parsedVersion *util.Version
+		err           error
+	)
+	if *version != "" {
+		parsedVersion, err = util.ParseVersion(*version)
+		if err != nil {
+			return nil, errors.Wrap(err, "couldn't parse version")
+		}
 	}
 
 	return &Options{
@@ -133,12 +140,12 @@ func getOpts() (*Options, error) {
 	}, nil
 }
 
-func checkTarget(opts *Options, target *Target, d objdiff.Differ) ([]string, []string, error) {
+func checkTarget(opts *Options, target *Target, version *util.Version, d objdiff.Differ) ([]string, []string, error) {
 	var obj objdiff.Object
 
 	versions := getAvailableVersions(opts.ManifestDir)
 
-	manifest := filepath.Join(opts.ManifestDir, opts.Version.String(), target.Manifest)
+	manifest := filepath.Join(opts.ManifestDir, version.String(), target.Manifest)
 	err := loadYaml(manifest, &obj)
 	if err != nil && !os.IsNotExist(errors.Cause(err)) {
 		return nil, nil, errors.Cause(err)
@@ -189,10 +196,25 @@ func run() error {
 		return errors.WithStack(err)
 	}
 
-	// create a mapper to get a gvr
 	config, err := clientcmd.BuildConfigFromFlags("", opts.Kubeconfig)
 	if err != nil {
 		return errors.WithStack(err)
+	}
+
+	version := opts.Version
+	if opts.Version == nil {
+		client, err := configv1.NewForConfig(config)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		cv, err := client.ClusterVersions().Get(context.TODO(), "version", v1.GetOptions{})
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		version, err = util.ParseVersion(cv.Status.Desired.Version)
+		if err != nil {
+			return errors.WithStack(err)
+		}
 	}
 
 	d, err := objdiff.New(config)
@@ -201,11 +223,9 @@ func run() error {
 	}
 
 	for _, target := range targets {
-
-		// format output
 		bold.Printf("# %s\n", filepath.Base(target.Manifest))
 
-		presences, diffs, err := checkTarget(opts, target, d)
+		presences, diffs, err := checkTarget(opts, target, version, d)
 		if err != nil {
 			warn.Fprintf(os.Stderr, "skipped due to error: %+v\n", err.Error())
 			continue
