@@ -105,7 +105,7 @@ func getOpts() (*Options, error) {
 	kubeconfig := flag.String("kubeconfig", kubeconfigDefault, "absolute path to the kubeconfig file")
 	target := flag.String("target", "", "path to the target list yaml")
 	manifest := flag.String("manifest", "", "path to the directory of default manifests")
-	version := flag.String("cluster-version", "", "cluster version")
+	version := flag.String("cluster-version", "", "cluster version. auto detect by default")
 	fallback := flag.Bool("fallback", true, "fallback when the specified version is not available")
 	flag.Parse()
 
