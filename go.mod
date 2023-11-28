@@ -1,4 +1,4 @@
-module difftool
+module github.com/bitoku/difftool
 
 go 1.20
 
