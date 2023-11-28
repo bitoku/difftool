@@ -1,7 +1,7 @@
 package main
 
 import (
-	"difftool/pkg/cli"
+	"github.com/bitoku/difftool/pkg/cli"
 )
 
 func main() {

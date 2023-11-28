@@ -8,7 +8,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"k8s.io/apimachinery/pkg/util/yaml"
 
-	"difftool/pkg/objdiff"
+	"github.com/bitoku/difftool/pkg/objdiff"
 )
 
 // if we unmarshall yaml directly, int64 is inferred as float64 somehow,

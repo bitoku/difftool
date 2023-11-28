@@ -20,8 +20,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
 
-	"difftool/pkg/objdiff"
-	"difftool/pkg/util"
+	"github.com/bitoku/difftool/pkg/objdiff"
+	"github.com/bitoku/difftool/pkg/util"
 )
 
 type Target struct {
