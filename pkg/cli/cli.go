@@ -152,7 +152,7 @@ func checkTarget(opts *Options, target *Target, version *util.Version, d objdiff
 				if os.IsNotExist(errors.Cause(err)) {
 					continue
 				}
-				fmt.Fprintf(os.Stderr, "use %s instead of %s\n", v, opts.Version)
+				fmt.Fprintf(os.Stderr, "use %s instead of %s\n", v, version)
 				break
 			}
 		} else {
